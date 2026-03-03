@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Application = require('../models/Application');
+const { protect: auth } = require('../middleware/authMiddleware');
 
 // GET /api/applications — Get all applications with optional filters
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     const { status, role, industry, company, priority, search, sortBy = 'appliedDate', order = 'desc' } = req.query;
 
@@ -31,12 +33,12 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/applications/stats — Dashboard stats
-router.get('/stats', async (req, res) => {
+router.get('/stats', auth, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = new mongoose.Types.ObjectId(req.user.id);
 
     const stats = await Application.aggregate([
-      { $match: { userId: require('mongoose').Types.ObjectId(userId) } },
+      { $match: { userId } },
       {
         $group: {
           _id: '$status',
@@ -63,7 +65,7 @@ router.get('/stats', async (req, res) => {
 
     // Monthly breakdown for chart
     const monthly = await Application.aggregate([
-      { $match: { userId: require('mongoose').Types.ObjectId(userId) } },
+      { $match: { userId } },
       {
         $group: {
           _id: { month: { $month: '$appliedDate' }, year: { $year: '$appliedDate' } },
@@ -81,7 +83,7 @@ router.get('/stats', async (req, res) => {
 });
 
 // GET /api/applications/:id — Get single application
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   try {
     const app = await Application.findOne({ _id: req.params.id, userId: req.user.id });
     if (!app) return res.status(404).json({ success: false, message: 'Application not found' });
@@ -92,7 +94,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/applications — Create new application
-router.post('/', async (req, res) => {
+router.post('/', auth, async (req, res) => {
   try {
     const application = await Application.create({ ...req.body, userId: req.user.id });
     res.status(201).json({ success: true, data: application });
@@ -102,7 +104,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/applications/:id — Update application
-router.put('/:id', async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   try {
     const app = await Application.findOneAndUpdate(
       { _id: req.params.id, userId: req.user.id },
@@ -117,7 +119,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/applications/:id — Delete application
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', auth, async (req, res) => {
   try {
     const app = await Application.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
     if (!app) return res.status(404).json({ success: false, message: 'Application not found' });

@@ -8,7 +8,7 @@ import HeroTitle from '../components/HeroTitle'
 import { useTheme } from '../context/ThemeContext'
 
 const FEATURES = [
-  { icon: Mail,      title: 'Auto Email Detection',  desc: 'Link Gmail or Outlook and every application confirmation is captured instantly — no copy-pasting ever again.' },
+  { icon: Mail,      title: 'Auto Email Detection',  desc: 'Link Gmail or Outlook and every application confirmation is captured instantly , no copy-pasting ever again.' },
   { icon: Zap,       title: 'Zero Manual Entry',     desc: 'Company name, role, date, and description extracted from emails automatically the moment they arrive.' },
   { icon: BarChart2, title: 'Insightful Analytics',  desc: 'See response rates, track trends over time, and understand exactly where your job search stands.' },
   { icon: Bell,      title: 'Smart Notifications',   desc: 'Never miss a follow-up. Get deadline reminders, status updates, and action suggestions at the right time.' },
@@ -41,17 +41,21 @@ const fadeUp = (delay = 0) => ({
 
 
 export default function Home() {
-  const { theme: t } = useTheme()
+  const { theme: t, dark } = useTheme()  // need 'dark' for overlay adjustment
 
   return (
     <div>
       {/* Hero */}
+      {/* Hero section uses the new background asset placed in public */}
+      {/* The image was recently added (OQCI8C0.jpg), so we reference it directly from /public */}
       <section className="min-h-screen flex items-center justify-center px-6 pt-16 relative overflow-hidden bg-cover bg-center"
-        style={{ backgroundImage: 'url(/background-image..png)' }}>
-        <div className="absolute inset-0 bg-black/35"></div>
+        style={{ backgroundImage: 'url(/OQCI8C0.jpg)' }}>
+        {/* dark overlay in dark mode, light overlay in light mode for legibility */}
+        <div className="absolute inset-0"
+          style={{ background: dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.35)' }}></div>
         <div className="max-w-4xl mx-auto text-center relative z-10">
           <motion.div {...fadeUp(0.1)}>
-            <HeroTitle t={t} />
+            <HeroTitle t={t} dark={dark} />
             </motion.div>
 
           <motion.div {...fadeUp(0.3)} className="flex flex-col sm:flex-row gap-4 justify-center mt-8">

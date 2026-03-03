@@ -13,6 +13,8 @@ app.use(express.json())
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'))
+app.use('/api/email', require('./routes/email'))           // ← ADD THIS
+app.use('/api/applications', require('./routes/application')) // ← ADD THIS TOO (from Day 3)
 
 // Health check
 app.get('/api', (req, res) => {

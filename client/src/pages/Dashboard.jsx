@@ -1,28 +1,49 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Briefcase, CheckCircle2, XCircle, Clock, Search,
   Plus, MoreVertical, Trash2, Star, Bell, LogOut,
   User, MapPin, AlertCircle, ChevronDown, X,
-  LayoutDashboard, TrendingUp, Mail
+  LayoutDashboard, TrendingUp, Mail, Link, Unlink,
+  CheckCheck, Loader2, BarChart2, Activity, Target, Zap
 } from 'lucide-react'
+import {
+  LineChart, Line, AreaChart, Area,
+  BarChart, Bar, Cell,
+  PieChart, Pie, Tooltip,
+  ResponsiveContainer, XAxis, YAxis, CartesianGrid,
+  Legend
+} from 'recharts'
 
-// ─── Theme: #191919 | #2D4263 | #C84B31 | #ECDBBA
+// ─── Theme
+const T = {
+  bg:       '#191919',
+  surface:  '#1f1f1f',
+  surface2: '#252525',
+  border:   '#2D426344',
+  border2:  '#2D426366',
+  primary:  '#2D4263',
+  accent:   '#C84B31',
+  text:     '#ECDBBA',
+  muted:    '#ECDBBA88',
+  faint:    '#ECDBBA33',
+}
 
 const STATUS_CONFIG = {
-  applied:        { label: 'Applied',      dot: 'bg-[#2D4263]',    badge: 'bg-[#2D4263]/30 text-[#ECDBBA] border-[#2D4263]' },
-  'under-review': { label: 'Under Review', dot: 'bg-amber-400',    badge: 'bg-amber-500/10 text-amber-300 border-amber-500/30' },
-  accepted:       { label: 'Accepted',     dot: 'bg-green-400',    badge: 'bg-green-500/10 text-green-300 border-green-500/30' },
-  rejected:       { label: 'Rejected',     dot: 'bg-[#C84B31]',    badge: 'bg-[#C84B31]/10 text-[#C84B31] border-[#C84B31]/30' },
-  'no-response':  { label: 'No Response',  dot: 'bg-[#ECDBBA]/30', badge: 'bg-[#ECDBBA]/5 text-[#ECDBBA]/50 border-[#ECDBBA]/10' },
+  applied:        { label: 'Applied',      color: '#2D4263', dot: 'bg-[#2D4263]',    badge: 'bg-[#2D4263]/30 text-[#ECDBBA] border-[#2D4263]' },
+  'under-review': { label: 'Under Review', color: '#F59E0B', dot: 'bg-amber-400',    badge: 'bg-amber-500/10 text-amber-300 border-amber-500/30' },
+  accepted:       { label: 'Accepted',     color: '#10B981', dot: 'bg-green-400',    badge: 'bg-green-500/10 text-green-300 border-green-500/30' },
+  rejected:       { label: 'Rejected',     color: '#C84B31', dot: 'bg-[#C84B31]',    badge: 'bg-[#C84B31]/10 text-[#C84B31] border-[#C84B31]/30' },
+  'no-response':  { label: 'No Response',  color: '#ECDBBA44', dot: 'bg-[#ECDBBA]/30', badge: 'bg-[#ECDBBA]/5 text-[#ECDBBA]/50 border-[#ECDBBA]/10' },
 }
 const PRIORITY_STARS = { high: 3, medium: 2, low: 1 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 const apiFetch = (path, opts = {}) => {
-  const token = localStorage.getItem('token')
+  const user = JSON.parse(localStorage.getItem('uzy_user') || '{}')
+  const token = user?.token
   return fetch(`${API_BASE}${path}`, {
     ...opts,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...opts.headers },
@@ -35,19 +56,523 @@ const applicationApi = {
   update:   (id, d)   => apiFetch(`/applications/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   remove:   (id)      => apiFetch(`/applications/${id}`, { method: 'DELETE' }),
 }
+const emailApi = {
+  getStatus:        () => apiFetch('/email/status'),
+  connectGoogle:    () => apiFetch('/email/google/connect'),
+  disconnectGoogle: () => apiFetch('/email/google/disconnect', { method: 'DELETE' }),
+}
 
+// ─── Helpers
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+const buildMonthlyData = (applications) => {
+  const now = new Date()
+  const data = []
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+    const month = d.getMonth()
+    const year  = d.getFullYear()
+    const count = applications.filter(a => {
+      const ad = new Date(a.appliedDate)
+      return ad.getMonth() === month && ad.getFullYear() === year
+    }).length
+    data.push({ name: MONTHS[month], count, month, year })
+  }
+  return data
+}
+
+const buildStatusData = (applications) => {
+  return Object.entries(STATUS_CONFIG).map(([key, cfg]) => ({
+    name:  cfg.label,
+    value: applications.filter(a => a.status === key).length,
+    color: cfg.color,
+    key,
+  })).filter(d => d.value > 0)
+}
+
+const buildCompanyData = (applications) => {
+  const map = {}
+  applications.forEach(a => {
+    map[a.company] = (map[a.company] || 0) + 1
+  })
+  return Object.entries(map)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 7)
+    .map(([name, count]) => ({ name, count }))
+}
+
+const buildWeeklyHeatmap = (applications) => {
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+  const weeks = 8
+  const grid = []
+  const now = new Date()
+
+  for (let w = weeks - 1; w >= 0; w--) {
+    const week = []
+    for (let d = 0; d < 7; d++) {
+      const date = new Date(now)
+      date.setDate(now.getDate() - (w * 7 + (6 - d)))
+      const count = applications.filter(a => {
+        const ad = new Date(a.appliedDate)
+        return ad.toDateString() === date.toDateString()
+      }).length
+      week.push({ date: date.toDateString(), count, day: days[date.getDay()] })
+    }
+    grid.push(week)
+  }
+  return { grid, days }
+}
+
+const getResponseRate = (applications) => {
+  if (!applications.length) return 0
+  const responded = applications.filter(a =>
+    a.status === 'accepted' || a.status === 'rejected' || a.status === 'under-review'
+  ).length
+  return Math.round((responded / applications.length) * 100)
+}
+
+// ─── Custom Tooltip
+const CustomTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="rounded-xl border px-3 py-2 text-xs shadow-xl"
+      style={{ background: T.surface2, borderColor: T.border2, color: T.text }}>
+      <p className="font-bold mb-1">{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color || T.accent }}>{p.name}: {p.value}</p>
+      ))}
+    </div>
+  )
+}
+
+// ─── Analytics Tab ────────────────────────────────────────────────────────────
+const AnalyticsTab = ({ applications, stats }) => {
+  const monthlyData  = buildMonthlyData(applications)
+  const statusData   = buildStatusData(applications)
+  const companyData  = buildCompanyData(applications)
+  const { grid }     = buildWeeklyHeatmap(applications)
+  const responseRate = getResponseRate(applications)
+
+  const maxHeat = Math.max(...grid.flat().map(c => c.count), 1)
+
+  const heatColor = (count) => {
+    if (count === 0) return T.border
+    const intensity = count / maxHeat
+    if (intensity < 0.33) return '#C84B3140'
+    if (intensity < 0.66) return '#C84B3180'
+    return '#C84B31'
+  }
+
+  const kpis = [
+    { label: 'Response Rate',    value: responseRate + '%',       icon: Activity, color: '#10B981' },
+    { label: 'Avg per Month',    value: applications.length ? Math.round(applications.length / Math.max(monthlyData.filter(m => m.count > 0).length, 1)) : 0, icon: TrendingUp, color: T.accent },
+    { label: 'Top Status',       value: statusData[0]?.name || '—', icon: Target,   color: '#F59E0B' },
+    { label: 'Most Applied',     value: companyData[0]?.name?.slice(0, 12) || '—', icon: Zap, color: '#2D4263' },
+  ]
+
+  if (!applications.length) {
+    return (
+      <div className="py-24 text-center">
+        <BarChart2 size={36} className="mx-auto mb-4" style={{ color: T.faint }} />
+        <p className="text-base font-bold mb-2" style={{ color: T.muted }}>No data yet</p>
+        <p className="text-sm" style={{ color: T.faint }}>Add applications to see your analytics</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+
+      {/* KPI Row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpis.map((kpi, i) => (
+          <motion.div
+            key={kpi.label}
+            initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.06, duration: 0.4 }}
+            className="rounded-2xl p-5 border"
+            style={{ background: T.surface, borderColor: T.border }}
+          >
+            <div
+              className="w-8 h-8 rounded-xl flex items-center justify-center mb-3"
+              style={{ background: kpi.color + '20' }}
+            >
+              <kpi.icon size={15} style={{ color: kpi.color }} />
+            </div>
+            <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: T.muted }}>
+              {kpi.label}
+            </p>
+            <p className="text-2xl font-black" style={{ color: T.text }}>{kpi.value}</p>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Applications Over Time + Status Donut */}
+      <div className="grid md:grid-cols-3 gap-5">
+
+        {/* Area Chart */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.4 }}
+          className="md:col-span-2 rounded-2xl border p-6"
+          style={{ background: T.surface, borderColor: T.border }}
+        >
+          <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: T.accent }}>
+            Activity
+          </p>
+          <h3 className="text-base font-black mb-6" style={{ color: T.text }}>
+            Applications Over Time
+          </h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <AreaChart data={monthlyData}>
+              <defs>
+                <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#C84B31" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="#C84B31" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={T.border} />
+              <XAxis dataKey="name" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Area
+                type="monotone" dataKey="count" name="Applications"
+                stroke="#C84B31" strokeWidth={2}
+                fill="url(#areaGrad)"
+                dot={{ fill: '#C84B31', r: 4, strokeWidth: 0 }}
+                activeDot={{ r: 6, fill: '#C84B31' }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </motion.div>
+
+        {/* Donut */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.4 }}
+          className="rounded-2xl border p-6"
+          style={{ background: T.surface, borderColor: T.border }}
+        >
+          <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: T.accent }}>
+            Breakdown
+          </p>
+          <h3 className="text-base font-black mb-4" style={{ color: T.text }}>
+            By Status
+          </h3>
+          <ResponsiveContainer width="100%" height={160}>
+            <PieChart>
+              <Pie
+                data={statusData}
+                cx="50%" cy="50%"
+                innerRadius={45} outerRadius={70}
+                paddingAngle={3}
+                dataKey="value"
+              >
+                {statusData.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} stroke="transparent" />
+                ))}
+              </Pie>
+              <Tooltip content={<CustomTooltip />} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="space-y-2 mt-2">
+            {statusData.map(s => (
+              <div key={s.key} className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                  <span className="text-xs" style={{ color: T.muted }}>{s.name}</span>
+                </div>
+                <span className="text-xs font-bold" style={{ color: T.text }}>{s.value}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Bar Chart + Heatmap */}
+      <div className="grid md:grid-cols-2 gap-5">
+
+        {/* Top Companies */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.4 }}
+          className="rounded-2xl border p-6"
+          style={{ background: T.surface, borderColor: T.border }}
+        >
+          <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: T.accent }}>
+            Companies
+          </p>
+          <h3 className="text-base font-black mb-6" style={{ color: T.text }}>
+            Most Applied To
+          </h3>
+          {companyData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={companyData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke={T.border} horizontal={false} />
+                <XAxis type="number" tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                <YAxis type="category" dataKey="name" width={80} tick={{ fill: T.muted, fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Bar dataKey="count" name="Applications" radius={[0, 6, 6, 0]}>
+                  {companyData.map((_, i) => (
+                    <Cell key={i} fill={i === 0 ? '#C84B31' : '#2D4263'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-center py-8" style={{ color: T.faint }}>No data yet</p>
+          )}
+        </motion.div>
+
+        {/* Activity Heatmap */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.4 }}
+          className="rounded-2xl border p-6"
+          style={{ background: T.surface, borderColor: T.border }}
+        >
+          <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: T.accent }}>
+            Consistency
+          </p>
+          <h3 className="text-base font-black mb-6" style={{ color: T.text }}>
+            Activity Heatmap
+          </h3>
+          <div className="space-y-1.5">
+            {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, di) => (
+              <div key={day} className="flex items-center gap-1.5">
+                <span className="text-[10px] w-6 shrink-0" style={{ color: T.faint }}>{day}</span>
+                <div className="flex gap-1.5 flex-1">
+                  {grid.map((week, wi) => {
+                    const cell = week[di]
+                    return (
+                      <div
+                        key={wi}
+                        title={cell ? cell.date + ': ' + cell.count + ' apps' : ''}
+                        className="flex-1 rounded aspect-square cursor-default transition-all"
+                        style={{
+                          background: cell ? heatColor(cell.count) : T.border,
+                          minWidth: '12px',
+                          maxWidth: '20px',
+                        }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 mt-4">
+            <span className="text-[10px]" style={{ color: T.faint }}>Less</span>
+            {[0, 0.25, 0.5, 0.75, 1].map((v, i) => (
+              <div
+                key={i}
+                className="w-3 h-3 rounded-sm"
+                style={{ background: v === 0 ? T.border : '#C84B31' + Math.round(v * 255).toString(16).padStart(2, '0') }}
+              />
+            ))}
+            <span className="text-[10px]" style={{ color: T.faint }}>More</span>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Response Rate Bar */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.4 }}
+        className="rounded-2xl border p-6"
+        style={{ background: T.surface, borderColor: T.border }}
+      >
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: T.accent }}>
+              Performance
+            </p>
+            <h3 className="text-base font-black" style={{ color: T.text }}>Response Metrics</h3>
+          </div>
+          <span className="text-3xl font-black" style={{ color: T.accent }}>{responseRate}%</span>
+        </div>
+        <div className="space-y-4">
+          {[
+            { label: 'Response Rate',   value: responseRate,                             color: '#10B981' },
+            { label: 'Rejection Rate',  value: stats.total ? Math.round((stats.rejected || 0) / stats.total * 100) : 0,   color: '#C84B31' },
+            { label: 'Under Review',    value: stats.total ? Math.round((stats.underReview || 0) / stats.total * 100) : 0, color: '#F59E0B' },
+            { label: 'Acceptance Rate', value: stats.total ? Math.round((stats.accepted || 0) / stats.total * 100) : 0,   color: '#2D4263' },
+          ].map(row => (
+            <div key={row.label}>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-medium" style={{ color: T.muted }}>{row.label}</span>
+                <span className="text-xs font-bold" style={{ color: T.text }}>{row.value}%</span>
+              </div>
+              <div className="h-1.5 rounded-full overflow-hidden" style={{ background: T.border }}>
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: row.value + '%' }}
+                  transition={{ duration: 0.8, delay: 0.4, ease: [0.23, 1, 0.32, 1] }}
+                  className="h-full rounded-full"
+                  style={{ background: row.color }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+    </div>
+  )
+}
+
+// ─── Email Connect Banner ─────────────────────────────────────────────────────
+const EmailConnectBanner = ({ onConnected }) => {
+  const [status, setStatus] = useState(null)
+  const [connecting, setConnecting] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [toast, setToast] = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  const showToast = (msg, type = 'success') => {
+    setToast({ msg, type })
+    setTimeout(() => setToast(null), 4000)
+  }
+
+  useEffect(() => {
+    emailApi.getStatus().then(data => setStatus(data)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const emailConnected = searchParams.get('emailConnected')
+    const emailError     = searchParams.get('emailError')
+    const found          = searchParams.get('found')
+    if (emailConnected) {
+      showToast('Gmail connected! ' + found + ' application' + (found === '1' ? '' : 's') + ' detected.')
+      emailApi.getStatus().then(data => { setStatus(data); onConnected() }).catch(() => {})
+      setSearchParams({})
+    }
+    if (emailError) {
+      showToast('Failed to connect Gmail. Please try again.', 'error')
+      setSearchParams({})
+    }
+  }, [])
+
+  const handleConnect = async () => {
+    setConnecting(true)
+    try {
+      const data = await emailApi.connectGoogle()
+      if (data.url) window.location.href = data.url
+    } catch {
+      showToast('Failed to start Gmail connection.', 'error')
+      setConnecting(false)
+    }
+  }
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true)
+    try {
+      await emailApi.disconnectGoogle()
+      setStatus(prev => ({ ...prev, google: { connected: false, email: null } }))
+      showToast('Gmail disconnected.')
+    } catch {
+      showToast('Failed to disconnect.', 'error')
+    }
+    setDisconnecting(false)
+  }
+
+  const isConnected = status?.google?.connected
+
+  return (
+    <>
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -16 }}
+            className="fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-xl border"
+            style={{
+              background: toast.type === 'error' ? '#C84B3120' : '#2D426320',
+              borderColor: toast.type === 'error' ? '#C84B3144' : '#2D426344',
+              color: T.text,
+            }}
+          >
+            {toast.msg}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25, duration: 0.4 }}
+        className="rounded-2xl border p-5 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+        style={{
+          background: isConnected ? '#2D426312' : '#C84B3108',
+          borderColor: isConnected ? '#2D426344' : '#C84B3122',
+        }}
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: isConnected ? '#2D426333' : '#C84B3120' }}>
+            <Mail size={18} style={{ color: isConnected ? T.text : T.accent }} />
+          </div>
+          <div>
+            {isConnected ? (
+              <>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <p className="text-sm font-bold" style={{ color: T.text }}>Gmail Connected</p>
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: '#25D36620', color: '#25D366' }}>
+                    <CheckCheck size={9} /> Active
+                  </span>
+                </div>
+                <p className="text-xs" style={{ color: T.faint }}>
+                  {status?.google?.email} — auto-detecting job applications
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-bold mb-0.5" style={{ color: T.text }}>
+                  Connect Gmail to auto-detect applications
+                </p>
+                <p className="text-xs" style={{ color: T.faint }}>
+                  We scan your inbox for job confirmation emails and add them automatically
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="shrink-0">
+          {isConnected ? (
+            <button onClick={handleDisconnect} disabled={disconnecting}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+              style={{ background: '#C84B3115', color: T.accent, border: '1px solid #C84B3133' }}
+              onMouseEnter={e => { e.currentTarget.style.background = '#C84B3125' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#C84B3115' }}>
+              {disconnecting ? <><Loader2 size={13} className="animate-spin" /> Disconnecting...</> : <><Unlink size={13} /> Disconnect</>}
+            </button>
+          ) : (
+            <button onClick={handleConnect} disabled={connecting}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all disabled:opacity-50"
+              style={{ background: T.accent, color: T.text }}
+              onMouseEnter={e => { if (!connecting) e.currentTarget.style.opacity = '0.9' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}>
+              {connecting ? <><Loader2 size={13} className="animate-spin" /> Connecting...</> : <><Link size={13} /> Connect Gmail</>}
+            </button>
+          )}
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 const StatCard = ({ icon: Icon, label, value, accent, delay }) => (
   <motion.div
     initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
     transition={{ delay, duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-    className="rounded-2xl p-5 border border-[#2D4263]/40 hover:border-[#2D4263] transition-colors"
-    style={{ background: '#1f1f1f' }}
+    className="rounded-2xl p-5 border hover:border-[#2D4263] transition-colors"
+    style={{ background: T.surface, borderColor: T.border }}
   >
     <div className="inline-flex p-2 rounded-xl mb-3" style={{ background: accent ? '#C84B3122' : '#2D426344' }}>
-      <Icon size={16} style={{ color: accent ? '#C84B31' : '#ECDBBA' }} />
+      <Icon size={16} style={{ color: accent ? T.accent : T.text }} />
     </div>
-    <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: '#ECDBBA99' }}>{label}</p>
-    <p className="text-3xl font-black" style={{ color: '#ECDBBA' }}>{value ?? '—'}</p>
+    <p className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: T.muted }}>{label}</p>
+    <p className="text-3xl font-black" style={{ color: T.text }}>{value ?? '—'}</p>
   </motion.div>
 )
 
@@ -83,47 +608,47 @@ const AddModal = ({ onClose, onAdd }) => {
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <motion.div className="absolute inset-0 backdrop-blur-sm" style={{ background: '#191919cc' }} onClick={onClose} />
       <motion.div className="relative w-full max-w-lg rounded-2xl p-6 shadow-2xl border"
-        style={{ background: '#1f1f1f', borderColor: '#2D4263' }}
+        style={{ background: T.surface, borderColor: T.primary }}
         initial={{ scale: 0.96, opacity: 0, y: 16 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.96, opacity: 0, y: 16 }}
         transition={{ type: 'spring', damping: 28, stiffness: 320 }}>
         <div className="flex items-center justify-between mb-6">
-          <h2 className="font-bold text-lg" style={{ color: '#ECDBBA' }}>Add Application</h2>
-          <button onClick={onClose} style={{ color: '#ECDBBA66' }}><X size={18} /></button>
+          <h2 className="font-bold text-lg" style={{ color: T.text }}>Add Application</h2>
+          <button onClick={onClose} style={{ color: T.faint }}><X size={18} /></button>
         </div>
         <div className="space-y-4">
           {[['Company *','company'],['Job Role *','role'],['Industry','industry'],['Location','location'],['Job URL','jobUrl']].map(([label, key]) => (
             <div key={key}>
-              <label className="text-xs font-medium mb-1.5 block" style={{ color: '#ECDBBA88' }}>{label}</label>
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: T.muted }}>{label}</label>
               <input value={form[key]} onChange={e => set(key, e.target.value)}
                 className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none"
-                style={{ background: '#191919', border: '1px solid #2D426388', color: '#ECDBBA' }} />
+                style={{ background: T.bg, border: '1px solid ' + T.border2, color: T.text }} />
             </div>
           ))}
           <div className="grid grid-cols-2 gap-4">
             {[['Status','status',Object.entries(STATUS_CONFIG).map(([v,c])=>[v,c.label])],['Priority','priority',[['high','High'],['medium','Medium'],['low','Low']]]].map(([label, key, opts]) => (
               <div key={key}>
-                <label className="text-xs font-medium mb-1.5 block" style={{ color: '#ECDBBA88' }}>{label}</label>
+                <label className="text-xs font-medium mb-1.5 block" style={{ color: T.muted }}>{label}</label>
                 <select value={form[key]} onChange={e => set(key, e.target.value)}
                   className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none"
-                  style={{ background: '#191919', border: '1px solid #2D426388', color: '#ECDBBA' }}>
+                  style={{ background: T.bg, border: '1px solid ' + T.border2, color: T.text }}>
                   {opts.map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
             ))}
           </div>
           <div>
-            <label className="text-xs font-medium mb-1.5 block" style={{ color: '#ECDBBA88' }}>Notes</label>
+            <label className="text-xs font-medium mb-1.5 block" style={{ color: T.muted }}>Notes</label>
             <textarea rows={3} value={form.notes} onChange={e => set('notes', e.target.value)}
               className="w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none resize-none"
-              style={{ background: '#191919', border: '1px solid #2D426388', color: '#ECDBBA' }} />
+              style={{ background: T.bg, border: '1px solid ' + T.border2, color: T.text }} />
           </div>
-          {error && <p className="text-sm" style={{ color: '#C84B31' }}>{error}</p>}
+          {error && <p className="text-sm" style={{ color: T.accent }}>{error}</p>}
         </div>
         <div className="flex gap-3 mt-6">
           <button onClick={onClose} className="flex-1 py-2.5 rounded-xl text-sm font-medium"
-            style={{ border: '1px solid #2D4263', color: '#ECDBBA88' }}>Cancel</button>
+            style={{ border: '1px solid ' + T.primary, color: T.muted }}>Cancel</button>
           <button onClick={handleSubmit} disabled={loading} className="flex-1 py-2.5 rounded-xl text-sm font-bold disabled:opacity-50"
-            style={{ background: '#C84B31', color: '#ECDBBA' }}>
+            style={{ background: T.accent, color: T.text }}>
             {loading ? 'Adding...' : 'Add Application'}
           </button>
         </div>
@@ -132,9 +657,11 @@ const AddModal = ({ onClose, onAdd }) => {
   )
 }
 
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [activeTab, setActiveTab] = useState('dashboard')
   const [applications, setApplications] = useState([])
   const [stats, setStats] = useState({ total: 0, applied: 0, underReview: 0, accepted: 0, rejected: 0 })
   const [search, setSearch] = useState('')
@@ -143,228 +670,314 @@ export default function Dashboard() {
   const [activeMenu, setActiveMenu] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  const handleLogout = () => { logout(); ('/') }
+  const handleLogout = () => { logout(); navigate('/') }
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      try {
-        const [statsRes, appsRes] = await Promise.all([applicationApi.getStats(), applicationApi.getAll()])
-        if (statsRes.success) setStats(statsRes.data)
-        if (appsRes.success) setApplications(appsRes.data)
-      } catch (err) { console.error(err) }
-      finally { setLoading(false) }
-    }
-    load()
-  }, [])
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const [statsRes, appsRes] = await Promise.all([applicationApi.getStats(), applicationApi.getAll()])
+      if (statsRes.success) setStats(statsRes.data)
+      if (appsRes.success) setApplications(appsRes.data)
+    } catch (err) { console.error(err) }
+    finally { setLoading(false) }
+  }
+
+  useEffect(() => { loadData() }, [])
 
   const filtered = applications.filter(app =>
     (!search || app.company.toLowerCase().includes(search.toLowerCase()) || app.role.toLowerCase().includes(search.toLowerCase())) &&
     (filterStatus === 'all' || app.status === filterStatus)
   )
 
-  const handleDelete = async (id) => { setApplications(p => p.filter(a => a._id !== id)); setActiveMenu(null); await applicationApi.remove(id) }
-  const handleStatusChange = async (id, status) => { setApplications(p => p.map(a => a._id === id ? { ...a, status } : a)); setActiveMenu(null); await applicationApi.update(id, { status }) }
+  const handleDelete = async (id) => {
+    setApplications(p => p.filter(a => a._id !== id))
+    setActiveMenu(null)
+    await applicationApi.remove(id)
+  }
+  const handleStatusChange = async (id, status) => {
+    setApplications(p => p.map(a => a._id === id ? { ...a, status } : a))
+    setActiveMenu(null)
+    await applicationApi.update(id, { status })
+  }
+
+  const TABS = [
+    { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { id: 'analytics',  icon: TrendingUp,      label: 'Analytics'  },
+    { id: 'email',      icon: Mail,             label: 'Email'      },
+  ]
 
   return (
-    <div className="min-h-screen" style={{ background: '#191919', color: '#ECDBBA' }}>
+    <div className="min-h-screen" style={{ background: T.bg, color: T.text }}>
 
       {/* Sidebar */}
       <aside className="fixed left-0 top-0 h-full w-16 flex flex-col items-center py-5 gap-4 z-20 border-r"
-        style={{ background: '#1a1a1a', borderColor: '#2D426344' }}>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-2 font-black text-sm"
-              style={{ background: '#C84B31', color: '#ECDBBA' }}>U</div>
+        style={{ background: '#1a1a1a', borderColor: T.border }}>
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-2 font-black text-sm"
+          style={{ background: T.accent, color: T.text }}>U</div>
         <nav className="flex flex-col gap-2 flex-1">
-          {[{icon:LayoutDashboard,active:true,label:'Dashboard'},{icon:Briefcase,active:false,label:'Applications'},{icon:TrendingUp,active:false,label:'Analytics'},{icon:Mail,active:false,label:'Email'}]
-            .map(({ icon: Icon, active, label }) => (
-              <button key={label} title={label} className="w-10 h-10 rounded-xl flex items-center justify-center transition-all"
-                style={{ background: active ? '#2D426344' : 'transparent', color: active ? '#ECDBBA' : '#ECDBBA44', border: active ? '1px solid #2D426366' : '1px solid transparent' }}>
-                <Icon size={18} />
-              </button>
+          {TABS.map(({ id, icon: Icon, label }) => (
+            <button key={id} title={label}
+              onClick={() => setActiveTab(id)}
+              className="w-10 h-10 rounded-xl flex items-center justify-center transition-all"
+              style={{
+                background: activeTab === id ? '#2D426344' : 'transparent',
+                color: activeTab === id ? T.text : T.faint,
+                border: activeTab === id ? '1px solid #2D426366' : '1px solid transparent',
+              }}>
+              <Icon size={18} />
+            </button>
           ))}
         </nav>
-        <button onClick={handleLogout} title="Logout" className="w-10 h-10 rounded-xl flex items-center justify-center"
-          style={{ color: '#ECDBBA44' }}><LogOut size={18} /></button>
+        <button onClick={handleLogout} title="Logout"
+          className="w-10 h-10 rounded-xl flex items-center justify-center"
+          style={{ color: T.faint }}>
+          <LogOut size={18} />
+        </button>
       </aside>
 
       <main className="ml-16 p-8">
+
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
           className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-black" style={{ color: '#ECDBBA' }}>
-              Welcome back, <span style={{ color: '#C84B31' }}>{user?.name}</span> 
+            <h1 className="text-2xl font-black" style={{ color: T.text }}>
+              {activeTab === 'dashboard' && <>Welcome back, <span style={{ color: T.accent }}>{user?.name}</span></>}
+              {activeTab === 'analytics' && <span style={{ color: T.text }}>Analytics</span>}
+              {activeTab === 'email'     && <span style={{ color: T.text }}>Email Settings</span>}
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: '#ECDBBA55' }}>Here's your job search overview</p>
+            <p className="text-sm mt-0.5" style={{ color: T.faint }}>
+              {activeTab === 'dashboard' && 'Here is your job search overview'}
+              {activeTab === 'analytics' && 'Insights from your job search activity'}
+              {activeTab === 'email'     && 'Manage your connected email accounts'}
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <button className="w-9 h-9 rounded-xl flex items-center justify-center border"
-              style={{ background: '#1f1f1f', borderColor: '#2D426344', color: '#ECDBBA66' }}><Bell size={16} /></button>
+              style={{ background: T.surface, borderColor: T.border, color: T.faint }}>
+              <Bell size={16} />
+            </button>
             <div className="flex items-center gap-2.5 rounded-xl px-3 py-2 border"
-              style={{ background: '#1f1f1f', borderColor: '#2D426344' }}>
+              style={{ background: T.surface, borderColor: T.border }}>
               <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: '#2D426344' }}>
-                <User size={12} style={{ color: '#ECDBBA' }} />
+                <User size={12} style={{ color: T.text }} />
               </div>
-              <span className="text-sm font-medium" style={{ color: '#ECDBBA' }}>{user?.name}</span>
+              <span className="text-sm font-medium" style={{ color: T.text }}>{user?.name}</span>
             </div>
           </div>
         </motion.div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {[
-            { icon: Briefcase,    label: 'Total Applied',  value: stats.total,       accent: false, delay: 0    },
-            { icon: Clock,        label: 'Under Review',   value: stats.underReview, accent: false, delay: 0.05 },
-            { icon: CheckCircle2, label: 'Accepted',        value: stats.accepted,    accent: false, delay: 0.1  },
-            { icon: XCircle,      label: 'Rejected',        value: stats.rejected,    accent: true,  delay: 0.15 },
-          ].map(card => <StatCard key={card.label} {...card} />)}
-        </div>
-
-        {/* Table Card */}
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.4 }}
-          className="rounded-2xl overflow-hidden border" style={{ background: '#1f1f1f', borderColor: '#2D426344' }}>
-
-          <div className="flex items-center gap-3 p-5 border-b" style={{ borderColor: '#2D426330' }}>
-            <div className="relative flex-1">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: '#ECDBBA33' }} />
-              <input className="w-full rounded-xl pl-9 pr-4 py-2 text-sm focus:outline-none"
-                style={{ background: '#191919', border: '1px solid #2D426366', color: '#ECDBBA' }}
-                placeholder="Search by company or role..." value={search} onChange={e => setSearch(e.target.value)} />
+        {/* ── Dashboard Tab ── */}
+        {activeTab === 'dashboard' && (
+          <>
+            <EmailConnectBanner onConnected={loadData} />
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              {[
+                { icon: Briefcase,    label: 'Total Applied',  value: stats.total,       accent: false, delay: 0    },
+                { icon: Clock,        label: 'Under Review',   value: stats.underReview, accent: false, delay: 0.05 },
+                { icon: CheckCircle2, label: 'Accepted',        value: stats.accepted,    accent: false, delay: 0.1  },
+                { icon: XCircle,      label: 'Rejected',        value: stats.rejected,    accent: true,  delay: 0.15 },
+              ].map(card => <StatCard key={card.label} {...card} />)}
             </div>
-            <div className="relative">
-              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-                className="appearance-none rounded-xl pl-4 pr-8 py-2 text-sm focus:outline-none cursor-pointer"
-                style={{ background: '#191919', border: '1px solid #2D426366', color: '#ECDBBA88' }}>
-                <option value="all">All Status</option>
-                {Object.entries(STATUS_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
-              </select>
-              <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#ECDBBA33' }} />
-            </div>
-            <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
-              style={{ background: '#C84B31', color: '#ECDBBA' }}>
-              <Plus size={15} /> Add
-            </button>
-          </div>
 
-          {loading ? (
-            <div className="py-20 text-center">
-              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                className="w-6 h-6 rounded-full mx-auto mb-3" style={{ border: '2px solid #C84B31', borderTopColor: 'transparent' }} />
-              <p className="text-sm" style={{ color: '#ECDBBA44' }}>Loading applications...</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #2D426330' }}>
-                    {['Company','Role','Status','Priority','Applied','Location',''].map(h => (
-                      <th key={h} className="text-left text-xs font-medium px-5 py-3 uppercase tracking-wider" style={{ color: '#ECDBBA44' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <AnimatePresence mode="popLayout">
-                    {filtered.map((app, i) => (
-                      <motion.tr key={app._id} layout
-                        initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
-                        transition={{ delay: i * 0.03 }} className="group transition-colors"
-                        style={{ borderBottom: '1px solid #2D426320' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#2D426310'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border"
-                              style={{ background: '#2D426322', borderColor: '#2D426366', color: '#C84B31' }}>
-                              {app.company[0].toUpperCase()}
-                            </div>
-                            <div>
-                              <p className="text-sm font-semibold" style={{ color: '#ECDBBA' }}>{app.company}</p>
-                              {app.autoDetected && <span className="text-[10px] flex items-center gap-1" style={{ color: '#C84B3166' }}><Mail size={9} /> auto-detected</span>}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-sm" style={{ color: '#ECDBBA88' }}>{app.role}</td>
-                        <td className="px-5 py-4"><StatusBadge status={app.status} /></td>
-                        <td className="px-5 py-4">
-                          <div className="flex gap-0.5">
-                            {[1,2,3].map(n => <Star key={n} size={12} style={{ color: n<=(PRIORITY_STARS[app.priority]||1)?'#C84B31':'#ECDBBA22', fill: n<=(PRIORITY_STARS[app.priority]||1)?'#C84B31':'none' }} />)}
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-sm" style={{ color: '#ECDBBA44' }}>
-                          {new Date(app.appliedDate).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center gap-1 text-sm" style={{ color: '#ECDBBA44' }}>
-                            <MapPin size={11} />{app.location||'—'}
-                          </div>
-                        </td>
-                        <td className="px-5 py-4">
-                          <div className="relative">
-                            <button onClick={() => setActiveMenu(activeMenu===app._id?null:app._id)}
-                              className="w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-                              style={{ color: '#ECDBBA55' }}><MoreVertical size={14} /></button>
-                            <AnimatePresence>
-                              {activeMenu===app._id && (
-                                <motion.div initial={{opacity:0,scale:0.95,y:-4}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.95,y:-4}}
-                                  transition={{duration:0.15}} className="absolute right-0 top-8 w-48 rounded-xl shadow-xl z-10 overflow-hidden p-1 border"
-                                  style={{background:'#1a1a1a',borderColor:'#2D426366'}}>
-                                  <p className="text-[10px] px-3 py-1.5 font-semibold uppercase tracking-wider" style={{color:'#ECDBBA44'}}>Change Status</p>
-                                  {Object.entries(STATUS_CONFIG).map(([v,c]) => (
-                                    <button key={v} onClick={()=>handleStatusChange(app._id,v)}
-                                      className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg"
-                                      style={{color:'#ECDBBA88'}}
-                                      onMouseEnter={e=>e.currentTarget.style.background='#2D426322'}
-                                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                      <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`}/>{c.label}
-                                    </button>
-                                  ))}
-                                  <hr style={{borderColor:'#2D426344',margin:'4px 0'}}/>
-                                  <button onClick={()=>handleDelete(app._id)}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg"
-                                    style={{color:'#C84B31'}}
-                                    onMouseEnter={e=>e.currentTarget.style.background='#C84B3110'}
-                                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                                    <Trash2 size={13}/>Delete
-                                  </button>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
-                </tbody>
-              </table>
-              {filtered.length===0&&!loading&&(
-                <div className="py-16 text-center">
-                  <AlertCircle size={28} className="mx-auto mb-3" style={{color:'#ECDBBA22'}}/>
-                  <p className="text-sm" style={{color:'#ECDBBA44'}}>No applications found</p>
-                  <button onClick={()=>setShowAddModal(true)} className="mt-4 px-4 py-2 rounded-xl text-sm"
-                    style={{background:'#C84B3115',color:'#C84B31'}}>Add your first application</button>
+            {/* Table */}
+            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.4 }}
+              className="rounded-2xl overflow-hidden border" style={{ background: T.surface, borderColor: T.border }}>
+              <div className="flex items-center gap-3 p-5 border-b" style={{ borderColor: '#2D426330' }}>
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: T.faint }} />
+                  <input className="w-full rounded-xl pl-9 pr-4 py-2 text-sm focus:outline-none"
+                    style={{ background: T.bg, border: '1px solid ' + T.border2, color: T.text }}
+                    placeholder="Search by company or role..." value={search} onChange={e => setSearch(e.target.value)} />
+                </div>
+                <div className="relative">
+                  <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+                    className="appearance-none rounded-xl pl-4 pr-8 py-2 text-sm focus:outline-none cursor-pointer"
+                    style={{ background: T.bg, border: '1px solid ' + T.border2, color: T.muted }}>
+                    <option value="all">All Status</option>
+                    {Object.entries(STATUS_CONFIG).map(([v, c]) => <option key={v} value={v}>{c.label}</option>)}
+                  </select>
+                  <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: T.faint }} />
+                </div>
+                <button onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
+                  style={{ background: T.accent, color: T.text }}>
+                  <Plus size={15} /> Add
+                </button>
+              </div>
+
+              {loading ? (
+                <div className="py-20 text-center">
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                    className="w-6 h-6 rounded-full mx-auto mb-3"
+                    style={{ border: '2px solid ' + T.accent, borderTopColor: 'transparent' }} />
+                  <p className="text-sm" style={{ color: T.faint }}>Loading applications...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #2D426330' }}>
+                        {['Company','Role','Status','Priority','Applied','Location',''].map(h => (
+                          <th key={h} className="text-left text-xs font-medium px-5 py-3 uppercase tracking-wider"
+                            style={{ color: T.faint }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <AnimatePresence mode="popLayout">
+                        {filtered.map((app, i) => (
+                          <motion.tr key={app._id} layout
+                            initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }}
+                            transition={{ delay: i * 0.03 }} className="group transition-colors"
+                            style={{ borderBottom: '1px solid #2D426320' }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#2D426310'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border"
+                                  style={{ background: '#2D426322', borderColor: T.border2, color: T.accent }}>
+                                  {app.company[0].toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-semibold" style={{ color: T.text }}>{app.company}</p>
+                                  {app.autoDetected && (
+                                    <span className="text-[10px] flex items-center gap-1" style={{ color: '#C84B3166' }}>
+                                      <Mail size={9} /> auto-detected
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-sm" style={{ color: T.muted }}>{app.role}</td>
+                            <td className="px-5 py-4"><StatusBadge status={app.status} /></td>
+                            <td className="px-5 py-4">
+                              <div className="flex gap-0.5">
+                                {[1,2,3].map(n => (
+                                  <Star key={n} size={12} style={{
+                                    color: n <= (PRIORITY_STARS[app.priority] || 1) ? T.accent : T.faint,
+                                    fill:  n <= (PRIORITY_STARS[app.priority] || 1) ? T.accent : 'none'
+                                  }} />
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-sm" style={{ color: T.faint }}>
+                              {new Date(app.appliedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-1 text-sm" style={{ color: T.faint }}>
+                                <MapPin size={11} />{app.location || '—'}
+                              </div>
+                            </td>
+                            <td className="px-5 py-4">
+                              <div className="relative">
+                                <button onClick={() => setActiveMenu(activeMenu === app._id ? null : app._id)}
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                                  style={{ color: T.muted }}><MoreVertical size={14} /></button>
+                                <AnimatePresence>
+                                  {activeMenu === app._id && (
+                                    <motion.div
+                                      initial={{ opacity: 0, scale: 0.95, y: -4 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+                                      exit={{ opacity: 0, scale: 0.95, y: -4 }} transition={{ duration: 0.15 }}
+                                      className="absolute right-0 top-8 w-48 rounded-xl shadow-xl z-10 overflow-hidden p-1 border"
+                                      style={{ background: '#1a1a1a', borderColor: T.border2 }}>
+                                      <p className="text-[10px] px-3 py-1.5 font-semibold uppercase tracking-wider" style={{ color: T.faint }}>
+                                        Change Status
+                                      </p>
+                                      {Object.entries(STATUS_CONFIG).map(([v, c]) => (
+                                        <button key={v} onClick={() => handleStatusChange(app._id, v)}
+                                          className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg"
+                                          style={{ color: T.muted }}
+                                          onMouseEnter={e => e.currentTarget.style.background = '#2D426322'}
+                                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                          <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />{c.label}
+                                        </button>
+                                      ))}
+                                      <hr style={{ borderColor: T.border2, margin: '4px 0' }} />
+                                      <button onClick={() => handleDelete(app._id)}
+                                        className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg"
+                                        style={{ color: T.accent }}
+                                        onMouseEnter={e => e.currentTarget.style.background = '#C84B3110'}
+                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                                        <Trash2 size={13} />Delete
+                                      </button>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            </td>
+                          </motion.tr>
+                        ))}
+                      </AnimatePresence>
+                    </tbody>
+                  </table>
+                  {filtered.length === 0 && !loading && (
+                    <div className="py-16 text-center">
+                      <AlertCircle size={28} className="mx-auto mb-3" style={{ color: T.faint }} />
+                      <p className="text-sm" style={{ color: T.faint }}>No applications found</p>
+                      <button onClick={() => setShowAddModal(true)} className="mt-4 px-4 py-2 rounded-xl text-sm"
+                        style={{ background: '#C84B3115', color: T.accent }}>
+                        Add your first application
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
 
-          <div className="px-5 py-3 flex items-center justify-between border-t" style={{borderColor:'#2D426330'}}>
-            <p className="text-xs" style={{color:'#ECDBBA33'}}>{filtered.length} of {applications.length} applications</p>
-            <div className="flex items-center gap-1">
-              {[['all','All'],['applied','Applied'],['under-review','Under Review'],['accepted','Accepted'],['rejected','Rejected']].map(([val,label])=>(
-                <button key={val} onClick={()=>setFilterStatus(val)} className="px-3 py-1 rounded-lg text-xs transition-colors"
-                  style={{background:filterStatus===val?'#C84B3120':'transparent',color:filterStatus===val?'#C84B31':'#ECDBBA44'}}>
-                  {label}
-                </button>
-              ))}
+              <div className="px-5 py-3 flex items-center justify-between border-t" style={{ borderColor: '#2D426330' }}>
+                <p className="text-xs" style={{ color: T.faint }}>{filtered.length} of {applications.length} applications</p>
+                <div className="flex items-center gap-1">
+                  {[['all','All'],['applied','Applied'],['under-review','Under Review'],['accepted','Accepted'],['rejected','Rejected']].map(([val, label]) => (
+                    <button key={val} onClick={() => setFilterStatus(val)} className="px-3 py-1 rounded-lg text-xs transition-colors"
+                      style={{ background: filterStatus === val ? '#C84B3120' : 'transparent', color: filterStatus === val ? T.accent : T.faint }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+
+        {/* ── Analytics Tab ── */}
+        {activeTab === 'analytics' && (
+          <AnalyticsTab applications={applications} stats={stats} />
+        )}
+
+        {/* ── Email Tab ── */}
+        {activeTab === 'email' && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+            <EmailConnectBanner onConnected={loadData} />
+            <div className="rounded-2xl border p-6 mt-2" style={{ background: T.surface, borderColor: T.border }}>
+              <h3 className="font-black text-base mb-2" style={{ color: T.text }}>How email detection works</h3>
+              <p className="text-sm leading-relaxed mb-4" style={{ color: T.muted }}>
+                When you connect Gmail, Uzy scans your inbox for job application confirmation emails from the past 3 months.
+                We look for subject lines like "Thank you for applying", "Application received", and similar patterns.
+                Detected applications are automatically added to your dashboard with the company name, role, and date extracted.
+              </p>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { step: '01', title: 'Connect', desc: 'Authorize Gmail access via Google OAuth' },
+                  { step: '02', title: 'Scan',    desc: 'We scan the past 3 months of emails'    },
+                  { step: '03', title: 'Done',    desc: 'Applications appear in your dashboard'   },
+                ].map(s => (
+                  <div key={s.step} className="rounded-xl p-4 border" style={{ background: T.surface2, borderColor: T.border }}>
+                    <p className="text-2xl font-black mb-2" style={{ color: T.accent + '33' }}>{s.step}</p>
+                    <p className="font-bold text-sm mb-1" style={{ color: T.text }}>{s.title}</p>
+                    <p className="text-xs" style={{ color: T.faint }}>{s.desc}</p>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
+
       </main>
 
       <AnimatePresence>
-        {showAddModal && <AddModal onClose={()=>setShowAddModal(false)} onAdd={app=>setApplications(p=>[app,...p])}/>}
+        {showAddModal && <AddModal onClose={() => setShowAddModal(false)} onAdd={app => setApplications(p => [app, ...p])} />}
       </AnimatePresence>
-      {activeMenu && <div className="fixed inset-0 z-[5]" onClick={()=>setActiveMenu(null)}/>}
+      {activeMenu && <div className="fixed inset-0 z-[5]" onClick={() => setActiveMenu(null)} />}
     </div>
   )
 }

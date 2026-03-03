@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
-function HeroTitle({ t }) {
+function HeroTitle({ t, dark }) {
   const fullTitle = "Your job search, finally organized.";
   const [displayedTitle, setDisplayedTitle] = useState("");
 
@@ -46,7 +46,7 @@ function HeroTitle({ t }) {
         <br />
 
         {/* Typing Line */}
-        <span style={{ color: t.text }}>
+        <span style={{ color: dark ? t.text : t.surface }}>
           {displayedTitle}
           {displayedTitle !== fullTitle && (
             <span className="animate-pulse">|</span>
@@ -57,9 +57,9 @@ function HeroTitle({ t }) {
       {/* Static Paragraph */}
       <p
         className="text-lg md:text-xl max-w-2xl mx-auto leading-relaxed mb-5"
-        style={{ color: t.textMuted }}
+        style={{ color: dark ? t.textMuted : t.surfaceHigh }}
       >
-        Uzy connects to your inbox and automatically tracks every job application —
+        Uzy connects to your inbox and automatically tracks every job application
         no spreadsheets, no manual entry, no missed follow-ups.
       </p>
 
