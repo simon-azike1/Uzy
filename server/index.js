@@ -2,9 +2,14 @@ const express = require('express')
 const cors = require('cors')
 const dotenv = require('dotenv')
 const connectDB = require('./config/db')
+const { startScheduler } = require('./services/scheduler')
+const { runDailyReminders, runWeeklySummary } = require('./services/scheduler')
+
+
 
 dotenv.config()
 connectDB()
+startScheduler()
 
 const app = express()
 
@@ -14,7 +19,14 @@ app.use(express.json())
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'))
 app.use('/api/email', require('./routes/email'))           // ← ADD THIS
-app.use('/api/applications', require('./routes/application')) // ← ADD THIS TOO (from Day 3)
+app.use('/api/applications', require('./routes/application'))
+app.use('/api/profile', require('./routes/profile'))
+app.use('/api/notifications', require('./routes/notifications'))
+app.get('/api/test-notifications', async (req, res) => {
+  await runDailyReminders()
+  await runWeeklySummary()
+  res.json({ success: true, message: 'Notifications triggered' })
+})
 
 // Health check
 app.get('/api', (req, res) => {

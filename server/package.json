@@ -20,6 +20,7 @@
     "googleapis": "^171.4.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.3",
+    "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2"
   },
   "devDependencies": {

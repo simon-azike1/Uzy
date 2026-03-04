@@ -39,44 +39,63 @@ router.get('/stats', auth, async (req, res) => {
 
     const stats = await Application.aggregate([
       { $match: { userId } },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-        },
-      },
+      { $group: { _id: '$status', count: { $sum: 1 } } },
     ]);
 
     const total = await Application.countDocuments({ userId });
 
-    const formatted = {
-      total,
-      applied: 0,
-      underReview: 0,
-      accepted: 0,
-      rejected: 0,
-      noResponse: 0,
-    };
-
+    const formatted = { total, applied: 0, underReview: 0, accepted: 0, rejected: 0, noResponse: 0 };
     stats.forEach(s => {
       const key = s._id.replace(/-([a-z])/g, g => g[1].toUpperCase());
       formatted[key] = s.count;
     });
 
-    // Monthly breakdown for chart
     const monthly = await Application.aggregate([
       { $match: { userId } },
-      {
-        $group: {
-          _id: { month: { $month: '$appliedDate' }, year: { $year: '$appliedDate' } },
-          count: { $sum: 1 },
-        },
-      },
+      { $group: { _id: { month: { $month: '$appliedDate' }, year: { $year: '$appliedDate' } }, count: { $sum: 1 } } },
       { $sort: { '_id.year': 1, '_id.month': 1 } },
       { $limit: 12 },
     ]);
 
     res.json({ success: true, data: { ...formatted, monthly } });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/applications/export/csv — Export all applications as CSV
+router.get('/export/csv', auth, async (req, res) => {
+  try {
+    const applications = await Application.find({ userId: req.user.id }).sort({ appliedDate: -1 });
+
+    const escape = (val) => {
+      if (val === null || val === undefined) return ''
+      const str = String(val)
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    }
+
+    const headers = ['Company', 'Role', 'Status', 'Priority', 'Applied Date', 'Location', 'Industry', 'Job URL', 'Notes', 'Auto Detected']
+    const rows = applications.map(app => [
+      escape(app.company),
+      escape(app.role),
+      escape(app.status),
+      escape(app.priority),
+      escape(app.appliedDate ? new Date(app.appliedDate).toLocaleDateString('en-US') : ''),
+      escape(app.location),
+      escape(app.industry),
+      escape(app.jobUrl),
+      escape(app.notes),
+      escape(app.autoDetected ? 'Yes' : 'No'),
+    ])
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n')
+
+    res.setHeader('Content-Type', 'text/csv')
+    res.setHeader('Content-Disposition', `attachment; filename="uzy-applications-${new Date().toISOString().slice(0,10)}.csv"`)
+    res.send(csv)
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
