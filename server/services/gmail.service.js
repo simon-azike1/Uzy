@@ -1,8 +1,8 @@
-const { google }        = require('googleapis')
+const { google }            = require('googleapis')
 const { googleOAuthClient } = require('../config/oauth')
-const { parseEmail }    = require('./emailParser')
+const { parseEmail }        = require('./emailParser')
 
-// Refresh access token if expired
+// ── Refresh access token if expired
 const refreshGoogleToken = async (user) => {
   googleOAuthClient.setCredentials({
     access_token:  user.googleAccessToken,
@@ -19,7 +19,7 @@ const refreshGoogleToken = async (user) => {
   return googleOAuthClient
 }
 
-// Decode base64 Gmail message body
+// ── Decode base64 Gmail message body
 const decodeBody = (payload) => {
   const getBody = (parts) => {
     if (!parts) return ''
@@ -41,53 +41,110 @@ const decodeBody = (payload) => {
   return getBody(payload.parts || [])
 }
 
-// Scan Gmail inbox for job application emails
-const scanGmail = async (user) => {
-  const auth   = await refreshGoogleToken(user)
-  const gmail  = google.gmail({ version: 'v1', auth })
-
-  // Date filter — past 3 months
-  const threeMonthsAgo = new Date()
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
-  const after = Math.floor(threeMonthsAgo.getTime() / 1000)
-
-  // Search query — common job application keywords
-  const query = `after:${after} (subject:("application received" OR "application confirmed" OR "thank you for applying" OR "thanks for applying" OR "we received your application" OR "you applied" OR "application submitted" OR "successfully applied"))`
-
-  const listRes = await gmail.users.messages.list({
-    userId:   'me',
-    q:        query,
-    maxResults: 200,
+// ── Fetch a single message (used inside batch)
+const fetchMessage = async (gmail, msgId) => {
+  const full = await gmail.users.messages.get({
+    userId: 'me',
+    id:     msgId,
+    format: 'full',
   })
 
-  const messages = listRes.data.messages || []
-  if (messages.length === 0) return []
+  const headers = full.data.payload.headers || []
+  const get = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || ''
 
-  const applications = []
+  return {
+    id:      msgId,
+    from:    get('From'),
+    subject: get('Subject'),
+    date:    get('Date'),
+    body:    decodeBody(full.data.payload),
+  }
+}
 
-  for (const msg of messages) {
-    try {
-      const full = await gmail.users.messages.get({
-        userId: 'me',
-        id:     msg.id,
-        format: 'full',
-      })
+// ── Process messages in parallel batches
+const fetchInBatches = async (gmail, messageIds, batchSize = 10) => {
+  const results = []
 
-      const headers = full.data.payload.headers || []
-      const get = (name) => headers.find(h => h.name.toLowerCase() === name.toLowerCase())?.value || ''
+  for (let i = 0; i < messageIds.length; i += batchSize) {
+    const batch = messageIds.slice(i, i + batchSize)
 
-      const from    = get('From')
-      const subject = get('Subject')
-      const date    = get('Date')
-      const body    = decodeBody(full.data.payload)
+    const settled = await Promise.allSettled(
+      batch.map(id => fetchMessage(gmail, id))
+    )
 
-      const parsed = parseEmail({ id: msg.id, from, subject, body, date })
-      if (parsed) applications.push(parsed)
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        results.push(result.value)
+      } else {
+        console.error('Failed to fetch message:', result.reason?.message)
+      }
+    }
 
-    } catch (err) {
-      console.error('Error parsing Gmail message', msg.id, err.message)
+    // Small delay between batches to avoid rate limiting
+    if (i + batchSize < messageIds.length) {
+      await new Promise(resolve => setTimeout(resolve, 100))
     }
   }
+
+  return results
+}
+
+// ── Scan Gmail inbox for job application emails
+const scanGmail = async (user) => {
+  const auth  = await refreshGoogleToken(user)
+  const gmail = google.gmail({ version: 'v1', auth })
+
+  // Date filter — past 6 months
+  const sixMonthsAgo = new Date()
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+  const after = Math.floor(sixMonthsAgo.getTime() / 1000)
+
+  // Broad search query covering common job application email patterns
+  const query = `after:${after} (subject:("application received" OR "application confirmed" OR "thank you for applying" OR "thanks for applying" OR "we received your application" OR "you applied" OR "application submitted" OR "successfully applied" OR "application under review" OR "your application to" OR "applied to" OR "job application"))`
+
+  // Paginate through all results up to 500
+  const messageIds = []
+  let pageToken    = null
+
+  do {
+    const listRes = await gmail.users.messages.list({
+      userId:     'me',
+      q:          query,
+      maxResults: 500,
+      ...(pageToken && { pageToken }),
+    })
+
+    const messages = listRes.data.messages || []
+    messageIds.push(...messages.map(m => m.id))
+    pageToken = listRes.data.nextPageToken || null
+
+    // Stop if we've collected 500
+    if (messageIds.length >= 500) break
+
+  } while (pageToken)
+
+  console.log(`[Gmail] Found ${messageIds.length} matching emails — fetching in batches...`)
+
+  if (messageIds.length === 0) return []
+
+  // Fetch all messages in parallel batches of 10
+  const rawMessages = await fetchInBatches(gmail, messageIds.slice(0, 500), 10)
+
+  console.log(`[Gmail] Successfully fetched ${rawMessages.length} emails — parsing...`)
+
+  // Parse each email into application data
+  const applications = []
+
+  for (const msg of rawMessages) {
+    try {
+      const parsed = parseEmail(msg)
+      if (parsed) applications.push(parsed)
+    } catch (err) {
+      console.error('Error parsing email:', msg.id, err.message)
+    }
+  }
+
+  console.log(`[Gmail] Parsed ${applications.length} job applications`)
 
   return applications
 }
