@@ -18,7 +18,7 @@ import Pricing       from './pages/Pricing'
 import Team          from './pages/Team'
 import Contact       from './pages/Contact'
 import PrivacyPolicy from './pages/PrivacyPolicy'
-import CookiePolicy  from './pages/CookiePolicy'
+import CookiePolicy from './pages/Cookiepolicy'
 
 function App() {
   return (
