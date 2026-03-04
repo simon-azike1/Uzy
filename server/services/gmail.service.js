@@ -94,10 +94,10 @@ const scanGmail = async (user) => {
   const auth  = await refreshGoogleToken(user)
   const gmail = google.gmail({ version: 'v1', auth })
 
-  // Date filter — past 6 months
-  const sixMonthsAgo = new Date()
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
-  const after = Math.floor(sixMonthsAgo.getTime() / 1000)
+  // Date filter — past 12 months
+  const twelveMonthsAgo = new Date()
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
+  const after = Math.floor(twelveMonthsAgo.getTime() / 1000)
 
   // Broad search query covering common job application email patterns
   const query = `after:${after} (subject:("application received" OR "application confirmed" OR "thank you for applying" OR "thanks for applying" OR "we received your application" OR "you applied" OR "application submitted" OR "successfully applied" OR "application under review" OR "your application to" OR "applied to" OR "job application"))`
@@ -118,8 +118,8 @@ const scanGmail = async (user) => {
     messageIds.push(...messages.map(m => m.id))
     pageToken = listRes.data.nextPageToken || null
 
-    // Stop if we've collected 500
-    if (messageIds.length >= 500) break
+    // Stop if we've collected 1000
+    if (messageIds.length >= 1000) break
 
   } while (pageToken)
 
@@ -128,7 +128,7 @@ const scanGmail = async (user) => {
   if (messageIds.length === 0) return []
 
   // Fetch all messages in parallel batches of 10
-  const rawMessages = await fetchInBatches(gmail, messageIds.slice(0, 500), 10)
+  const rawMessages = await fetchInBatches(gmail, messageIds.slice(0, 1000), 10)
 
   console.log(`[Gmail] Successfully fetched ${rawMessages.length} emails — parsing...`)
 
