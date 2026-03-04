@@ -13,10 +13,15 @@ startScheduler()
 
 const app = express()
 
-app.use(cors({
-  origin: ['https://uzy-flame.vercel.app', 'http://localhost:5173'],
-  credentials: true
-}))
+// Replace app.use(cors({...})) with this:
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://uzy-flame.vercel.app')
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.header('Access-Control-Allow-Credentials', 'true')
+  if (req.method === 'OPTIONS') return res.sendStatus(200)
+  next()
+})
 app.use(express.json())
 
 // Routes
