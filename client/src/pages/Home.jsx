@@ -41,15 +41,14 @@ const fadeUp = (delay = 0) => ({
 
 
 export default function Home() {
-  const { theme: t, dark } = useTheme()  // need 'dark' for overlay adjustment
-
+  const { theme: t, dark } = useTheme()  
   return (
     <div>
       {/* Hero */}
       {/* Hero section uses the new background asset placed in public */}
       {/* The image was recently added (OQCI8C0.jpg), so we reference it directly from /public */}
       <section className="min-h-screen flex items-center justify-center px-6 pt-16 relative overflow-hidden bg-cover bg-center"
-        style={{ backgroundImage: 'url(/OQCI8C0.jpg)' }}>
+        style={{ backgroundImage: 'url(/homeImage.jpg)' }}>
         {/* dark overlay in dark mode, light overlay in light mode for legibility */}
         <div className="absolute inset-0"
           style={{ background: dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.35)' }}></div>
