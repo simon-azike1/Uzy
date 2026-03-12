@@ -155,20 +155,20 @@ const SettingsTab = ({ onProfileUpdate }) => {
           className="fixed top-5 right-5 z-50 px-4 py-3 rounded-xl text-sm font-medium shadow-xl border"
           style={{ background: toast.type === 'error' ? '#C84B3120' : T.primary + '20', borderColor: toast.type === 'error' ? '#C84B3144' : T.primary + '44', color: T.text }}>{toast.msg}</motion.div>}
       </AnimatePresence>
-      <div className="flex gap-6">
-        <div className="w-48 shrink-0">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+        <div className="w-full md:w-48 md:shrink-0">
           <div className="rounded-2xl border overflow-hidden" style={cardStyle}>
-            <div className="p-6 flex flex-col items-center border-b" style={{ borderColor: T.border }}>
+            <div className="hidden md:flex p-6 flex-col items-center border-b" style={{ borderColor: T.border }}>
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black mb-3" style={{ background: form.avatarColor, color: '#fff' }}>
                 {form.name?.[0]?.toUpperCase() || 'U'}
               </div>
               <p className="text-sm font-bold text-center" style={{ color: T.text }}>{form.name}</p>
               <p className="text-xs text-center mt-0.5" style={{ color: T.textFaint }}>{form.email}</p>
             </div>
-            <nav className="p-2">
+            <nav className="p-2 flex md:flex-col gap-1 overflow-x-auto">
               {SECTIONS.map(({ id, icon: Icon, label }) => (
                 <button key={id} onClick={() => setActiveSection(id)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all"
+                  className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap"
                   style={{ background: activeSection === id ? '#C84B3115' : 'transparent', color: activeSection === id ? T.accent : T.textMuted }}>
                   <Icon size={15} />{label}
                 </button>
@@ -619,8 +619,9 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen transition-colors duration-300" style={{background:T.bg,color:T.text}}>
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 h-full w-16 flex flex-col items-center py-5 gap-4 z-20 border-r transition-colors duration-300"
+
+      {/* ── Desktop Sidebar */}
+      <aside className="hidden md:flex fixed left-0 top-0 h-full w-16 flex-col items-center py-5 gap-4 z-20 border-r transition-colors duration-300"
         style={{background:T.surface,borderColor:T.border}}>
         <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-2 font-black text-sm" style={{background:avatarColor,color:'#fff'}}>
           {user?.name?.[0]?.toUpperCase()||'U'}
@@ -634,7 +635,6 @@ export default function Dashboard() {
             </button>
           ))}
         </nav>
-        {/* Theme toggle in sidebar */}
         <button onClick={toggleTheme} title={dark?'Light mode':'Dark mode'}
           className="w-10 h-10 rounded-xl flex items-center justify-center transition-all"
           style={{color:T.textFaint}}>
@@ -647,14 +647,46 @@ export default function Dashboard() {
         </button>
       </aside>
 
-      <main className="ml-16 p-8">
-        <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}} transition={{duration:0.35}}
-          className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-black" style={{color:T.text}}>{TAB_TITLES[activeTab].title}</h1>
-            <p className="text-sm mt-0.5" style={{color:T.textFaint}}>{TAB_TITLES[activeTab].sub}</p>
+      {/* ── Mobile Top Bar */}
+      <header className="md:hidden fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-3 border-b"
+        style={{background:T.surface,borderColor:T.border}}>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm" style={{background:avatarColor,color:'#fff'}}>
+            {user?.name?.[0]?.toUpperCase()||'U'}
           </div>
-          <div className="flex items-center gap-3">
+          <span className="font-bold text-sm" style={{color:T.text}}>{user?.name}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <ThemeToggle/>
+          <NotificationBell/>
+          <button onClick={handleLogout} className="w-8 h-8 rounded-xl flex items-center justify-center" style={{color:T.textFaint}}>
+            <LogOut size={16}/>
+          </button>
+        </div>
+      </header>
+
+      {/* ── Mobile Bottom Nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex items-center justify-around py-2 border-t"
+        style={{background:T.surface,borderColor:T.border}}>
+        {TABS.map(({id,icon:Icon,label})=>(
+          <button key={id} onClick={()=>setActiveTab(id)}
+            className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all"
+            style={{color:activeTab===id?T.accent:T.textFaint}}>
+            <Icon size={20}/>
+            <span className="text-[10px] font-medium">{label}</span>
+          </button>
+        ))}
+      </nav>
+
+      {/* ── Main Content */}
+      <main className="md:ml-16 pt-16 md:pt-0 pb-24 md:pb-0 px-4 py-4 md:p-8">
+        <motion.div initial={{opacity:0,y:-10}} animate={{opacity:1,y:0}} transition={{duration:0.35}}
+          className="flex items-center justify-between mb-5 md:mb-8">
+          <div>
+            <h1 className="text-lg md:text-2xl font-black" style={{color:T.text}}>{TAB_TITLES[activeTab].title}</h1>
+            <p className="text-xs md:text-sm mt-0.5" style={{color:T.textFaint}}>{TAB_TITLES[activeTab].sub}</p>
+          </div>
+          <div className="hidden md:flex items-center gap-3">
             <ThemeToggle />
             <NotificationBell />
             <div className="flex items-center gap-2.5 rounded-xl px-3 py-2 border" style={{background:T.surface,borderColor:T.border}}>
@@ -669,7 +701,7 @@ export default function Dashboard() {
         {activeTab==='dashboard' && (
           <>
             <EmailConnectBanner onConnected={loadData}/>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
               {[
                 {icon:Briefcase,label:'Total Applied',value:stats.total,accent:false,delay:0},
                 {icon:Clock,label:'Under Review',value:stats.underReview,accent:false,delay:0.05},
@@ -677,31 +709,38 @@ export default function Dashboard() {
                 {icon:XCircle,label:'Rejected',value:stats.rejected,accent:true,delay:0.15},
               ].map(card=><StatCard key={card.label} {...card}/>)}
             </div>
+
             <motion.div initial={{opacity:0,y:16}} animate={{opacity:1,y:0}} transition={{delay:0.2,duration:0.4}}
               className="rounded-2xl overflow-hidden border" style={{background:T.surface,borderColor:T.border}}>
-              <div className="flex items-center gap-3 p-5 border-b" style={{borderColor:T.border}}>
+
+              {/* Search + Filter bar */}
+              <div className="p-3 md:p-5 border-b space-y-2 md:space-y-0 md:flex md:items-center md:gap-3" style={{borderColor:T.border}}>
                 <div className="relative flex-1">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:T.textFaint}}/>
                   <input className="w-full rounded-xl pl-9 pr-4 py-2 text-sm focus:outline-none"
                     style={{background:T.bg,border:'1px solid '+T.border,color:T.text}}
-                    placeholder="Search by company or role..." value={search} onChange={e=>setSearch(e.target.value)}/>
+                    placeholder="Search company or role..." value={search} onChange={e=>setSearch(e.target.value)}/>
                 </div>
-                <div className="relative">
-                  <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
-                    className="appearance-none rounded-xl pl-4 pr-8 py-2 text-sm focus:outline-none cursor-pointer"
-                    style={{background:T.bg,border:'1px solid '+T.border,color:T.textMuted}}>
-                    <option value="all">All Status</option>
-                    {Object.entries(STATUS_CONFIG).map(([v,c])=><option key={v} value={v}>{c.label}</option>)}
-                  </select>
-                  <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{color:T.textFaint}}/>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 md:flex-none">
+                    <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+                      className="w-full appearance-none rounded-xl pl-4 pr-8 py-2 text-sm focus:outline-none cursor-pointer"
+                      style={{background:T.bg,border:'1px solid '+T.border,color:T.textMuted}}>
+                      <option value="all">All Status</option>
+                      {Object.entries(STATUS_CONFIG).map(([v,c])=><option key={v} value={v}>{c.label}</option>)}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{color:T.textFaint}}/>
+                  </div>
+                  <button onClick={()=>exportCSV(T)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold shrink-0"
+                    style={{background:T.surfaceHigh,border:'1px solid '+T.border,color:T.textMuted}}>
+                    <Download size={14}/>
+                    <span className="hidden sm:inline">CSV</span>
+                  </button>
+                  <button onClick={()=>setShowAddModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold shrink-0"
+                    style={{background:T.accent,color:'#fff'}}><Plus size={14}/>Add</button>
                 </div>
-                <button onClick={()=>exportCSV(T)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
-                  style={{background:T.surfaceHigh,border:'1px solid '+T.border,color:T.textMuted}}>
-                  <Download size={15}/>CSV
-                </button>
-                <button onClick={()=>setShowAddModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold"
-                  style={{background:T.accent,color:'#fff'}}><Plus size={15}/>Add</button>
               </div>
+
               {loading ? (
                 <div className="py-20 text-center">
                   <motion.div animate={{rotate:360}} transition={{repeat:Infinity,duration:1,ease:'linear'}}
@@ -709,56 +748,115 @@ export default function Dashboard() {
                   <p className="text-sm" style={{color:T.textFaint}}>Loading applications...</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr style={{borderBottom:'1px solid '+T.border}}>
-                        {['Company','Role','Status','Priority','Applied','Location',''].map(h=>(
-                          <th key={h} className="text-left text-xs font-medium px-5 py-3 uppercase tracking-wider" style={{color:T.textFaint}}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <AnimatePresence mode="popLayout">
-                        {filtered.map((app,i)=>(
-                          <motion.tr key={app._id} layout initial={{opacity:0,x:-8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}}
-                            transition={{delay:i*0.03}} className="group transition-colors" style={{borderBottom:'1px solid '+T.border}}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.primary+'10'}
-                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border"
-                                  style={{background:T.primary+'22',borderColor:T.border,color:T.accent}}>
-                                  {app.company[0].toUpperCase()}
+                <>
+                  {/* Desktop Table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr style={{borderBottom:'1px solid '+T.border}}>
+                          {['Company','Role','Status','Priority','Applied','Location',''].map(h=>(
+                            <th key={h} className="text-left text-xs font-medium px-5 py-3 uppercase tracking-wider" style={{color:T.textFaint}}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <AnimatePresence mode="popLayout">
+                          {filtered.map((app,i)=>(
+                            <motion.tr key={app._id} layout initial={{opacity:0,x:-8}} animate={{opacity:1,x:0}} exit={{opacity:0,x:8}}
+                              transition={{delay:i*0.03}} className="group transition-colors" style={{borderBottom:'1px solid '+T.border}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.primary+'10'}
+                              onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                              <td className="px-5 py-4">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black border"
+                                    style={{background:T.primary+'22',borderColor:T.border,color:T.accent}}>
+                                    {app.company[0].toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold" style={{color:T.text}}>{app.company}</p>
+                                    {app.autoDetected&&<span className="text-[10px] flex items-center gap-1" style={{color:'#C84B3166'}}><Mail size={9}/>auto-detected</span>}
+                                  </div>
                                 </div>
-                                <div>
-                                  <p className="text-sm font-semibold" style={{color:T.text}}>{app.company}</p>
-                                  {app.autoDetected&&<span className="text-[10px] flex items-center gap-1" style={{color:'#C84B3166'}}><Mail size={9}/>auto-detected</span>}
+                              </td>
+                              <td className="px-5 py-4 text-sm" style={{color:T.textMuted}}>{app.role}</td>
+                              <td className="px-5 py-4"><StatusBadge status={app.status}/></td>
+                              <td className="px-5 py-4">
+                                <div className="flex gap-0.5">
+                                  {[1,2,3].map(n=><Star key={n} size={12} style={{color:n<=(PRIORITY_STARS[app.priority]||1)?T.accent:T.textFaint,fill:n<=(PRIORITY_STARS[app.priority]||1)?T.accent:'none'}}/>)}
                                 </div>
+                              </td>
+                              <td className="px-5 py-4 text-sm" style={{color:T.textFaint}}>
+                                {new Date(app.appliedDate).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                              </td>
+                              <td className="px-5 py-4">
+                                <div className="flex items-center gap-1 text-sm" style={{color:T.textFaint}}><MapPin size={11}/>{app.location||'—'}</div>
+                              </td>
+                              <td className="px-5 py-4">
+                                <div className="relative">
+                                  <button onClick={()=>setActiveMenu(activeMenu===app._id?null:app._id)}
+                                    className="w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                                    style={{color:T.textMuted}}><MoreVertical size={14}/></button>
+                                  <AnimatePresence>
+                                    {activeMenu===app._id&&(
+                                      <motion.div initial={{opacity:0,scale:0.95,y:-4}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.95,y:-4}}
+                                        transition={{duration:0.15}} className="absolute right-0 top-8 w-48 rounded-xl shadow-xl z-10 overflow-hidden p-1 border"
+                                        style={{background:T.surface,borderColor:T.border}}>
+                                        <p className="text-[10px] px-3 py-1.5 font-semibold uppercase tracking-wider" style={{color:T.textFaint}}>Change Status</p>
+                                        {Object.entries(STATUS_CONFIG).map(([v,c])=>(
+                                          <button key={v} onClick={()=>handleStatusChange(app._id,v)}
+                                            className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg" style={{color:T.textMuted}}
+                                            onMouseEnter={e=>e.currentTarget.style.background=T.primary+'22'}
+                                            onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                            <span className="w-1.5 h-1.5 rounded-full" style={{background:c.color}}/>{c.label}
+                                          </button>
+                                        ))}
+                                        <hr style={{borderColor:T.border,margin:'4px 0'}}/>
+                                        <button onClick={()=>handleDelete(app._id)} className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg"
+                                          style={{color:T.accent}}
+                                          onMouseEnter={e=>e.currentTarget.style.background='#C84B3110'}
+                                          onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                                          <Trash2 size={13}/>Delete
+                                        </button>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          ))}
+                        </AnimatePresence>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Mobile Cards */}
+                  <div className="md:hidden divide-y" style={{borderColor:T.border}}>
+                    <AnimatePresence mode="popLayout">
+                      {filtered.map((app,i)=>(
+                        <motion.div key={app._id} layout initial={{opacity:0,y:8}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-8}}
+                          transition={{delay:i*0.03}} className="p-4" style={{borderColor:T.border}}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black shrink-0 border"
+                                style={{background:T.primary+'22',borderColor:T.border,color:T.accent}}>
+                                {app.company[0].toUpperCase()}
                               </div>
-                            </td>
-                            <td className="px-5 py-4 text-sm" style={{color:T.textMuted}}>{app.role}</td>
-                            <td className="px-5 py-4"><StatusBadge status={app.status}/></td>
-                            <td className="px-5 py-4">
-                              <div className="flex gap-0.5">
-                                {[1,2,3].map(n=><Star key={n} size={12} style={{color:n<=(PRIORITY_STARS[app.priority]||1)?T.accent:T.textFaint,fill:n<=(PRIORITY_STARS[app.priority]||1)?T.accent:'none'}}/>)}
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold truncate" style={{color:T.text}}>{app.company}</p>
+                                <p className="text-xs truncate" style={{color:T.textMuted}}>{app.role}</p>
+                                {app.autoDetected&&<span className="text-[10px] flex items-center gap-1 mt-0.5" style={{color:'#C84B3166'}}><Mail size={9}/>auto-detected</span>}
                               </div>
-                            </td>
-                            <td className="px-5 py-4 text-sm" style={{color:T.textFaint}}>
-                              {new Date(app.appliedDate).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
-                            </td>
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-1 text-sm" style={{color:T.textFaint}}><MapPin size={11}/>{app.location||'—'}</div>
-                            </td>
-                            <td className="px-5 py-4">
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <StatusBadge status={app.status}/>
                               <div className="relative">
                                 <button onClick={()=>setActiveMenu(activeMenu===app._id?null:app._id)}
-                                  className="w-7 h-7 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                                  className="w-7 h-7 rounded-lg flex items-center justify-center"
                                   style={{color:T.textMuted}}><MoreVertical size={14}/></button>
                                 <AnimatePresence>
                                   {activeMenu===app._id&&(
                                     <motion.div initial={{opacity:0,scale:0.95,y:-4}} animate={{opacity:1,scale:1,y:0}} exit={{opacity:0,scale:0.95,y:-4}}
-                                      transition={{duration:0.15}} className="absolute right-0 top-8 w-48 rounded-xl shadow-xl z-10 overflow-hidden p-1 border"
+                                      transition={{duration:0.15}} className="absolute right-0 top-8 w-48 rounded-xl shadow-xl z-20 overflow-hidden p-1 border"
                                       style={{background:T.surface,borderColor:T.border}}>
                                       <p className="text-[10px] px-3 py-1.5 font-semibold uppercase tracking-wider" style={{color:T.textFaint}}>Change Status</p>
                                       {Object.entries(STATUS_CONFIG).map(([v,c])=>(
@@ -780,12 +878,22 @@ export default function Dashboard() {
                                   )}
                                 </AnimatePresence>
                               </div>
-                            </td>
-                          </motion.tr>
-                        ))}
-                      </AnimatePresence>
-                    </tbody>
-                  </table>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 mt-2.5 ml-12">
+                            <div className="flex gap-0.5">
+                              {[1,2,3].map(n=><Star key={n} size={11} style={{color:n<=(PRIORITY_STARS[app.priority]||1)?T.accent:T.textFaint,fill:n<=(PRIORITY_STARS[app.priority]||1)?T.accent:'none'}}/>)}
+                            </div>
+                            <span className="text-xs" style={{color:T.textFaint}}>
+                              {new Date(app.appliedDate).toLocaleDateString('en-US',{month:'short',day:'numeric'})}
+                            </span>
+                            {app.location&&<div className="flex items-center gap-1 text-xs" style={{color:T.textFaint}}><MapPin size={10}/>{app.location}</div>}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+
                   {filtered.length===0&&!loading&&(
                     <div className="py-16 text-center">
                       <AlertCircle size={28} className="mx-auto mb-3" style={{color:T.textFaint}}/>
@@ -793,13 +901,14 @@ export default function Dashboard() {
                       <button onClick={()=>setShowAddModal(true)} className="mt-4 px-4 py-2 rounded-xl text-sm" style={{background:'#C84B3115',color:T.accent}}>Add your first application</button>
                     </div>
                   )}
-                </div>
+                </>
               )}
-              <div className="px-5 py-3 flex items-center justify-between border-t" style={{borderColor:T.border}}>
+
+              <div className="px-4 md:px-5 py-3 flex flex-wrap items-center justify-between gap-2 border-t" style={{borderColor:T.border}}>
                 <p className="text-xs" style={{color:T.textFaint}}>{filtered.length} of {applications.length} applications</p>
-                <div className="flex items-center gap-1">
-                  {[['all','All'],['applied','Applied'],['under-review','Under Review'],['accepted','Accepted'],['rejected','Rejected']].map(([val,label])=>(
-                    <button key={val} onClick={()=>setFilterStatus(val)} className="px-3 py-1 rounded-lg text-xs transition-colors"
+                <div className="flex flex-wrap items-center gap-1">
+                  {[['all','All'],['applied','Applied'],['under-review','Review'],['accepted','Accepted'],['rejected','Rejected']].map(([val,label])=>(
+                    <button key={val} onClick={()=>setFilterStatus(val)} className="px-2.5 py-1 rounded-lg text-xs transition-colors"
                       style={{background:filterStatus===val?'#C84B3120':'transparent',color:filterStatus===val?T.accent:T.textFaint}}>
                       {label}
                     </button>
@@ -815,11 +924,11 @@ export default function Dashboard() {
         {activeTab==='email' && (
           <motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{duration:0.35}}>
             <EmailConnectBanner onConnected={loadData}/>
-            <div className="rounded-2xl border p-6 mt-2" style={{background:T.surface,borderColor:T.border}}>
+            <div className="rounded-2xl border p-4 md:p-6 mt-2" style={{background:T.surface,borderColor:T.border}}>
               <h3 className="font-black text-base mb-2" style={{color:T.text}}>How email detection works</h3>
-              <p className="text-sm leading-relaxed mb-4" style={{color:T.textMuted}}>When you connect Gmail, Uzy scans your inbox for job application confirmation emails from the past 3 months. We look for subject lines like "Thank you for applying", "Application received", and similar patterns. Detected applications are automatically added to your dashboard.</p>
-              <div className="grid grid-cols-3 gap-4">
-                {[{step:'01',title:'Connect',desc:'Authorize Gmail access via Google OAuth'},{step:'02',title:'Scan',desc:'We scan the past 3 months of emails'},{step:'03',title:'Done',desc:'Applications appear in your dashboard'}].map(s=>(
+              <p className="text-sm leading-relaxed mb-4" style={{color:T.textMuted}}>When you connect Gmail, Uzy scans your inbox for job application confirmation emails from the past 12 months. We look for subject lines like "Thank you for applying", "Application received", and similar patterns. Detected applications are automatically added to your dashboard.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+                {[{step:'01',title:'Connect',desc:'Authorize Gmail access via Google OAuth'},{step:'02',title:'Scan',desc:'We scan the past 12 months of emails'},{step:'03',title:'Done',desc:'Applications appear in your dashboard'}].map(s=>(
                   <div key={s.step} className="rounded-xl p-4 border" style={{background:T.surfaceHigh,borderColor:T.border}}>
                     <p className="text-2xl font-black mb-2" style={{color:T.accent+'33'}}>{s.step}</p>
                     <p className="font-bold text-sm mb-1" style={{color:T.text}}>{s.title}</p>

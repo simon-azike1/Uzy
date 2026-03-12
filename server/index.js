@@ -3,8 +3,9 @@ const cors = require('cors')
 const connectDB = require('./config/db')
 const { startScheduler } = require('./services/scheduler')
 
-
-
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config()
+}
 
 
 connectDB()
@@ -13,8 +14,17 @@ startScheduler()
 const app = express()
 
 // Replace app.use(cors({...})) with this:
+const allowedOrigins = [
+  'https://uzy-flame.vercel.app',
+  'http://localhost:5173',
+  'http://localhost:5174',
+]
+
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://uzy-flame.vercel.app')
+  const origin = req.headers.origin
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin)
+  }
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   res.header('Access-Control-Allow-Credentials', 'true')
